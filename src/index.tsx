@@ -7,26 +7,6 @@ import * as fs from "fs"
 
 const BOOKMARKS_PATH = join(homedir(), "/Library/Application Support/Sidekick/Default/Bookmarks");
 
-function walkEdge(node: Node, v: Visitor) {
-  switch (node.type) {
-    case "url":
-      v.visit(node)
-    case "folder":
-      if (node.children === undefined) {
-        return
-      }
-      node.children.forEach((child) => walkEdge(child, v))
-  }
-}
-
-function parseSidekickBookmark(): Bookmark[] {
-  const data = fs.readFileSync(BOOKMARKS_PATH, "utf-8");
-  const json = JSON.parse(data);
-  const v = new NodeVisitor();
-  walkEdge(json.roots.bookmark_bar, v);
-  return v.data;
-}
-
 export default function Command() {
   const bookmarks = useMemo(() => {
     return parseSidekickBookmark()
@@ -71,6 +51,26 @@ function SearchListItem({ bookmark }: { bookmark: Bookmark }) {
       }
     />
   );
+}
+
+function walkEdge(node: Node, v: Visitor) {
+  switch (node.type) {
+    case "url":
+      v.visit(node)
+    case "folder":
+      if (node.children === undefined) {
+        return
+      }
+      node.children.forEach((child) => walkEdge(child, v))
+  }
+}
+
+function parseSidekickBookmark(): Bookmark[] {
+  const data = fs.readFileSync(BOOKMARKS_PATH, "utf-8");
+  const json = JSON.parse(data);
+  const v = new NodeVisitor();
+  walkEdge(json.roots.bookmark_bar, v);
+  return v.data;
 }
 
 interface Bookmark {
