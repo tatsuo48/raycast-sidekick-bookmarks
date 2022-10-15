@@ -70,6 +70,7 @@ function parseSidekickBookmark(): Bookmark[] {
   const json = JSON.parse(data);
   const v = new NodeVisitor();
   walkEdge(json.roots.bookmark_bar, v);
+  walkEdge(json.roots.other, v);
   return v.data;
 }
 
