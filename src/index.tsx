@@ -1,52 +1,71 @@
 import { ActionPanel, Action, List } from "@raycast/api";
-import { useFetch, Response } from "@raycast/utils";
-import { useState } from "react";
-import { URLSearchParams } from "node:url";
+import { getFavicon } from "@raycast/utils";
+import { useEffect, useState, useMemo } from "react";
+import { join } from "path";
+import { homedir } from "os";
+import * as fs from "fs"
+
+const BOOKMARKS_PATH = join(homedir(), "/Library/Application Support/Sidekick/Default/Bookmarks");
+
+function walkEdge(node: Node, v: Visitor) {
+  switch (node.type) {
+    case "url":
+      v.visit(node)
+    case "folder":
+      if (node.children === undefined) {
+        return
+      }
+      node.children.forEach((child) => walkEdge(child, v))
+  }
+}
+
+function parseSidekickBookmark(): Bookmark[] {
+  const data = fs.readFileSync(BOOKMARKS_PATH, "utf-8");
+  const json = JSON.parse(data);
+  const v = new NodeVisitor();
+  walkEdge(json.roots.bookmark_bar, v);
+  return v.data;
+}
 
 export default function Command() {
+  const bookmarks = useMemo(() => {
+    return parseSidekickBookmark()
+  }, []);
   const [searchText, setSearchText] = useState("");
-  const { data, isLoading } = useFetch(
-    "https://api.npms.io/v2/search?" +
-      // send the search query to the API
-      new URLSearchParams({ q: searchText.length === 0 ? "@raycast/api" : searchText }),
-    {
-      parseResponse: parseFetchResponse,
+  const [filteredBookmarks, setFilteredBookmarks] = useState(bookmarks);
+  useEffect(() => {
+    if (searchText.length > 0) {
+      const filtered = bookmarks.filter((bookmark) => bookmark.name.toLowerCase().includes(searchText.toLowerCase()));
+      setFilteredBookmarks(filtered);
+    } else {
+      setFilteredBookmarks(bookmarks);
     }
-  );
+  }, [searchText]);
 
   return (
     <List
-      isLoading={isLoading}
       onSearchTextChange={setSearchText}
-      searchBarPlaceholder="Search npm packages..."
+      searchBarPlaceholder="Search sidekick bookmarks..."
       throttle
     >
-      <List.Section title="Results" subtitle={data?.length + ""}>
-        {data?.map((searchResult) => (
-          <SearchListItem key={searchResult.name} searchResult={searchResult} />
+      <List.Section title="Results" subtitle={bookmarks?.length + ""}>
+        {filteredBookmarks?.map((bookmark) => (
+          <SearchListItem key={bookmark.guid} bookmark={bookmark} />
         ))}
       </List.Section>
     </List>
   );
 }
 
-function SearchListItem({ searchResult }: { searchResult: SearchResult }) {
+function SearchListItem({ bookmark }: { bookmark: Bookmark }) {
   return (
     <List.Item
-      title={searchResult.name}
-      subtitle={searchResult.description}
-      accessoryTitle={searchResult.username}
+      icon={getFavicon(bookmark.url)}
+      title={bookmark.name}
       actions={
         <ActionPanel>
           <ActionPanel.Section>
-            <Action.OpenInBrowser title="Open in Browser" url={searchResult.url} />
-          </ActionPanel.Section>
-          <ActionPanel.Section>
-            <Action.CopyToClipboard
-              title="Copy Install Command"
-              content={`npm install ${searchResult.name}`}
-              shortcut={{ modifiers: ["cmd"], key: "." }}
-            />
+            <Action.OpenInBrowser title="Open in Browser" url={bookmark.url} />
           </ActionPanel.Section>
         </ActionPanel>
       }
@@ -54,38 +73,34 @@ function SearchListItem({ searchResult }: { searchResult: SearchResult }) {
   );
 }
 
-/** Parse the response from the fetch query into something we can display */
-async function parseFetchResponse(response: Response) {
-  const json = (await response.json()) as
-    | {
-        results: {
-          package: {
-            name: string;
-            description?: string;
-            publisher?: { username: string };
-            links: { npm: string };
-          };
-        }[];
-      }
-    | { code: string; message: string };
-
-  if (!response.ok || "message" in json) {
-    throw new Error("message" in json ? json.message : response.statusText);
-  }
-
-  return json.results.map((result) => {
-    return {
-      name: result.package.name,
-      description: result.package.description,
-      username: result.package.publisher?.username,
-      url: result.package.links.npm,
-    } as SearchResult;
-  });
+interface Bookmark {
+  name: string;
+  url: string;
+  guid: string
 }
 
-interface SearchResult {
+interface Node {
   name: string;
-  description?: string;
-  username?: string;
+  guid: string;
+  type: string;
   url: string;
+  children: Node[];
+}
+
+interface Visitor {
+  visit(node: Node): void;
+}
+
+class NodeVisitor implements Visitor {
+  data: Bookmark[]
+  constructor() {
+    this.data = []
+  }
+  visit(node: Node) {
+    this.data.push({
+      name: node.name,
+      url: node.url,
+      guid: node.guid
+    })
+  }
 }
