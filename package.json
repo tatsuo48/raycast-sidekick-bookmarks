@@ -1,7 +1,7 @@
 {
   "$schema": "https://www.raycast.com/schemas/extension.json",
-  "name": "sidekick-bookmarks-search",
-  "title": "sidekick bookmarks search",
+  "name": "raycast-sidekick-bookmarks",
+  "title": "raycast sidekick bookmarks",
   "description": "",
   "icon": "command-icon.png",
   "author": "1188838a99ef",
